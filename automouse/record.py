@@ -6,7 +6,7 @@ To begin recording:
 - Run `python record.py`
 
 To end recording:
-- Hold right click for 2 seconds then release to end the recording for mouse.
+- Hold left click for 3 seconds then release to end the recording for mouse.
 - Press 'ESC' to end the recording for keyboard.
 - Both are needed to finish recording.
 """
@@ -14,7 +14,7 @@ import time
 import json
 from pynput import mouse, keyboard
 
-print("Hold right click for 2 seconds then release to end the recording for mouse")
+print("Hold left click for 3 seconds then release to end the recording for mouse")
 print("Click 'ESC' to end the recording for keyboard")
 print("Both are needed to finish recording")
 
@@ -90,8 +90,8 @@ def on_click(x, y, button, pressed):
 
     if len(recording) > 1:
         if recording[-1]['action'] == 'unclicked' and \
-           recording[-1]['button'] == 'Button.right' and \
-           recording[-1]['_time'] - recording[-2]['_time'] > 2:
+           recording[-1]['button'] == 'Button.left' and \
+           recording[-1]['_time'] - recording[-2]['_time'] > 3:
             with open('recording.json', 'w') as f:
                 json.dump(recording, f)
             print("Mouse recording ended.")
