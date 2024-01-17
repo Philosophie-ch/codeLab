@@ -29,8 +29,8 @@ def read_json_file():
         recording = json.load(f)
 
     def excluded_actions(object):
-        return "released" not in object["action"] and \
-               "scroll" not in object["action"]
+        return "released" not in object["action"]# and \
+               #"scroll" not in object["action"]
 
     recording = list(filter(excluded_actions, recording))
 
@@ -90,6 +90,10 @@ def convert_to_pyautogui_script(recording):
                 output.write("pyautogui.mouseUp(button='right')\n")
             else:
                 output.write("pyautogui.mouseUp()\n")
+
+        if step["action"] == "scroll":
+            output.write(f"pyautogui.scroll({step['vertical_direction']}, x={step['x']}, y={step['y']})\n")
+
 
     print("Recording converted. Saved to 'play.py'")
 
