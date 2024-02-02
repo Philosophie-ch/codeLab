@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+
+function usage {
+    cat <<EOF
+doi2bib - Converts DOIs to BibTeX entries, using the CrossRef API.
+    
+    Accepts DOIs as arguments or from stdin (one per line).
+
+    A DOI has the form: 10.1234/abc. If another kind of input is provided, returns an error message.
+
+Usages: 
+    doi2bib [-h | --help] DOI_1 DOI_2 ...
+    cat each_line_is_a_doi.txt | doi2bib
+
+Options:
+  -h, --help    Show this help message and exit.
+
+Dependencies
+    curl
+
+EOF
+
+}
+
+function check_dependencies {
+    commands=(curl)
+
+    for cmd in "${commands[@]}"; do
+        if ! command -v "${cmd}" &> /dev/null; then
+            echo "Error: ${cmd} not found. Please install it and try again." >&2
+            exit 1
+        fi
+    done
+
+}
+
+# is_doi function
+# This function checks if the input string is a DOI (Digital Object Identifier).
+# It expects a single argument, a string, and returns 0 if the string is a DOI, 1 otherwise.
+function is_doi {
+
+    if [[ "${1}" =~ ^10\.[0-9]{4,}\/.+$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+
+}
+
+# doi2bib function
+# This function takes a DOI as an argument and returns the BibTeX entry for the corresponding publication.
+# If the DOI is invalid, it returns an error message.
+function doi2bib {
+
+    if is_doi "${1}"; then
+        curl -LH "Accept: application/x-bibtex" "https://doi.org/${1}"
+    else
+        echo "Invalid DOI: ${1}"
+    fi
+
+}
+
+function main {
+
+    check_dependencies
+
+    case "$1" in
+
+    "-h" | "--help")
+        usage
+        exit 0
+        ;;
+
+    esac
+
+    if [ $# -eq 0 ]; then
+        # Accept inputs from stdin, if no argument is provided.
+        while IFS= read -r doi; do
+            doi2bib "${doi}"
+        done
+
+    else
+        # Else process the arguments as DOIs.
+        for doi in "$@"; do
+            doi2bib "${doi}"
+        done
+
+    fi
+}
+
+# If the script is not being sourced, run the main function.
+# this is done so that the script can be tested
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
