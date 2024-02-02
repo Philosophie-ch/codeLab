@@ -49,7 +49,12 @@ function assert_file_exists {
 
 function ffuz {
     if assert_file_exists "${1}"; then
-        cat "${1}" | fzf --tac
+    # fzf options:
+    # +i: starts the search in the case-sensitive mode
+    # --reverse: starts the search from the bottom
+    # --preview: shows the line in the preview window
+    # --preview-window: sets the preview window to the bottom, 20% of the screen, and wraps the text
+        cat "${1}" | fzf +i --reverse --preview 'echo {}' --preview-window=bottom,20%,wrap
     else
         echo "Error: file \"${1}\" does not exist." >&2
         exit 1
