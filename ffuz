@@ -5,7 +5,7 @@ function usage {
 
 ffuz -  file to fuzzy search
     
-    Accepts a file as argument. Meant to be used with plain text files. Starts fzf to fuzzy match what you write with a line of the file. Prints the selected line to stdout.
+    Accepts a file as argument. Meant to be used with plain text files. Starts fzf to fuzzy match what you write with a line of the file. Prints the selected line to stdout. Multiple selection with the TAB key is possible.
 
     If the file does not exist, returns an error message. Uses only the first file passed as an argument, ignores all other arguments.
        
@@ -50,11 +50,11 @@ function assert_file_exists {
 function ffuz {
     if assert_file_exists "${1}"; then
     # fzf options:
-    # +i: starts the search in the case-sensitive mode
+    # --multi: allows selecting multiple items
     # --reverse: starts the search from the bottom
     # --preview: shows the line in the preview window
     # --preview-window: sets the preview window to the bottom, 20% of the screen, and wraps the text
-        cat "${1}" | fzf +i --reverse --preview 'echo {}' --preview-window=bottom,20%,wrap
+        cat "${1}" | fzf --multi --reverse --preview 'echo {}' --preview-window=bottom,20%,wrap
     else
         echo "Error: file \"${1}\" does not exist." >&2
         exit 1
