@@ -8,6 +8,7 @@ before use.
 Always review 'play.py' before running with PyAutoGUI!
 """
 import json
+import platform
 
 key_mappings = {
     "cmd": "win",
@@ -16,6 +17,9 @@ key_mappings = {
     "ctrl_l": "ctrl",
     "ctrl_r": "ctrl"
 }
+
+if platform.system() == "Darwin":
+    key_mappings["cmd"] = "command"
 
 
 def read_json_file():
