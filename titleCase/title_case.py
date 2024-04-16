@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import List
+from typing import Generator, List
 from titlecase import titlecase
 
 
@@ -12,16 +12,17 @@ def title_casing(title: str) -> str:
     return titlecase(lower_title)
 
 
-def main(title_list: List[str]) -> List[str]:
+def main(title_list: List[str]) -> Generator[str, None, None]:
     """
-    Loop over the main functionality
+    Loop over the main functionality. Returns a generator of title cased strings, as it's more memory-efficient than returning a list.
     """
 
-    return [title_casing(title) for title in title_list]
+    return (title_casing(title) for title in title_list)
 
 
 def cli() -> None:
 
+    # CLI inputs
     import argparse
 
     parser = argparse.ArgumentParser(description="Convert a list of strings to title case.")
@@ -30,10 +31,15 @@ def cli() -> None:
 
     args = parser.parse_args()
 
-    title_list = [line.strip() for line in args.file]
 
-    for title in main(title_list):
-        print(title)
+    # Main
+    titles = main(args.file)
+
+
+    # Secondary effects
+    for title in titles:
+        print(title, end="")
+    print()
 
 
 if __name__ == "__main__":
