@@ -2,7 +2,7 @@
 
 case "${1}" in
     "" | "-h" | "--help")
-        echo "Usage: replace.sh <file_1> <file_2> ..."
+        echo "Usage: ${0} <file_1> <file_2> ..."
         echo "WARNING: Modifies the file in-place using `sed` and the replacement table hardcoded in this script. You should backup your files before using this script."
         exit 0
         ;;
