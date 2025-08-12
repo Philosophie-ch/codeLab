@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doi_batch version="4.4.2" xmlns="http://www.crossref.org/schema/4.4.2"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://www.crossref.org/schema/4.4.2
+           http://www.crossref.org/schema/deposit/crossref4.4.2.xsd">
+
+  <head>
+    <doi_batch_id>philosophie-test-20250105</doi_batch_id>
+    <timestamp>20250105143000</timestamp>
+    <depositor>
+      <depositor_name>Philosophie.ch</depositor_name>
+      <email_address>philipp.blum@philosophie.ch</email_address>
+    </depositor>
+    <registrant>Philosophie.ch</registrant>
+  </head>
+
+  <body>
+    <journal>
+      <journal_metadata language="en">
+        <full_title>Philosophie.ch Test Journal</full_title>
+        <issn media_type="electronic">1234-5678</issn>
+      </journal_metadata>
+
+      <journal_issue>
+        <publication_date media_type="online">
+          <year>2025</year>
+        </publication_date>
+        <journal_volume>
+          <volume>1</volume>
+        </journal_volume>
+        <issue>1</issue>
+      </journal_issue>
+
+      <journal_article publication_type="full_text">
+        <titles>
+          <title>Minimal Test Article</title>
+        </titles>
+        <contributors>
+          <person_name sequence="first" contributor_role="author">
+            <given_name>Alice</given_name>
+            <surname>Smith</surname>
+          </person_name>
+        </contributors>
+        <publication_date media_type="online">
+          <year>2025</year>
+        </publication_date>
+        <pages>
+          <first_page>1</first_page>
+          <last_page>5</last_page>
+        </pages>
+        <doi_data>
+          <doi>10.27938/test.2025.001</doi>
+          <resource>https://philosophie.ch/test/article/001</resource>
+        </doi_data>
+      </journal_article>
+
+    </journal>
+  </body>
+</doi_batch>
