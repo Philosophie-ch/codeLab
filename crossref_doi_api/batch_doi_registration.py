@@ -32,10 +32,81 @@ from dotenv import load_dotenv
 
 # Import our existing modules
 from csv_to_xml import CSVToXMLConverter
-from api_test import deposit_test_doi, list_existing_dois
+from api_test import list_existing_dois
+import requests
 
 JSONValue = Union[str, int, float, bool, None, Dict[str, Any], List[Any]]
 JSONObject = Dict[str, JSONValue]
+
+
+def deposit_xml_content(username: str, password: str, xml_content: str, 
+                       doi: str, use_sandbox: bool = True) -> bool:
+    """
+    Submit XML content directly to Crossref without creating a file.
+    
+    Parameters
+    ----------
+    username : str
+        Crossref login username
+    password : str
+        Crossref login password
+    xml_content : str
+        XML content as string
+    doi : str
+        DOI being submitted (for error reporting)
+    use_sandbox : bool
+        Use sandbox environment if True
+        
+    Returns
+    -------
+    bool
+        True if submission successful
+    """
+    if use_sandbox:
+        url = "https://test.crossref.org/servlet/deposit"
+        print("📝 Using SANDBOX environment")
+    else:
+        url = "https://doi.crossref.org/servlet/deposit"
+        print("⚠️  Using PRODUCTION environment")
+
+    try:
+        # Create file-like object from XML string
+        xml_bytes = xml_content.encode('utf-8')
+        files = {"fname": (f"{doi.replace('/', '_')}.xml", xml_bytes, "application/xml")}
+        
+        data = {
+            "operation": "doMDUpload",
+            "login_id": username,
+            "login_passwd": password,
+        }
+        
+        print(f"   Attempting deposit for DOI: {doi}")
+        response = requests.post(url, data=data, files=files, timeout=30)
+        
+        print(f"   Response status: {response.status_code}")
+        
+        if response.status_code == 200:
+            print("✅ Deposit submitted successfully!")
+            print("Server response:")
+            print(response.text[:500])  # Show first 500 chars
+            return True
+        elif response.status_code == 401:
+            print("❌ 401 Unauthorized - check credentials")
+            return False
+        else:
+            print(f"   Unexpected status code: {response.status_code}")
+            print(f"   Response: {response.text[:500]}")
+            
+            # Check if it's just a warning/success with different code
+            if "success" in response.text.lower() or "accepted" in response.text.lower():
+                print("✅ Deposit appears successful despite status code!")
+                return True
+            
+            return False
+            
+    except requests.RequestException as e:
+        print(f"❌ Error depositing DOI: {e}")
+        return False
 
 
 class BatchDOIRegistration:
@@ -205,110 +276,116 @@ class BatchDOIRegistration:
                             'results': []
                         }
         
-        # Generate XML files
-        print("\n📄 Generating XML files...")
-        with tempfile.TemporaryDirectory(prefix="crossref_batch_") as temp_dir:
-            xml_results = self.csv_converter.process_csv(csv_file, temp_dir)
+        # Process CSV with in-memory XML generation (using generator - no file creation!)
+        print("\n📡 Processing CSV and submitting DOIs to Crossref...")
+        
+        try:
+            # Use generator to process XML in memory - no temporary files!
+            xml_generator = self.csv_converter.generate_xml_from_csv(csv_file)
             
-            if not xml_results['success']:
-                return {
-                    'success': False,
-                    'error': "XML generation failed",
-                    'xml_results': xml_results,
-                    'conflict_check': conflict_results,
-                    'results': []
-                }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f"CSV processing failed: {e}",
+                'conflict_check': conflict_results,
+                'results': []
+            }
+        
+        # Submit each XML directly from memory using the generator
+        submission_results = []
+        successful = 0
+        failed = 0
+        
+        for i, (xml_content, metadata) in enumerate(xml_generator, 1):
+            doi = metadata['doi']
+            title = metadata.get('title', '(no title)')
             
-            print(f"   Generated {len(xml_results['xml_files'])} XML files")
+            # Progress reporting every 100 entries
+            if i % 100 == 0:
+                print(f"\n📈 {i} entries processed so far...")
             
-            # Submit each XML file
-            print(f"\n📡 Submitting DOIs to Crossref...")
-            submission_results = []
-            successful = 0
-            failed = 0
+            print(f"\n   [{i}] Processing: {doi}")
+            print(f"      Title: {title}")
             
-            for i, xml_file in enumerate(xml_results['xml_files'], 1):
-                xml_path = Path(xml_file)
-                doi_from_filename = xml_path.stem.replace('_', '.', 2).replace('_', '/', 1)
+            # Attempt submission with retries
+            success = False
+            attempts = 0
+            last_error = None
+            
+            while attempts < max_retries and not success:
+                attempts += 1
                 
-                print(f"\n   [{i}/{len(xml_results['xml_files'])}] Processing: {doi_from_filename}")
-                
-                # Attempt submission with retries
-                success = False
-                attempts = 0
-                last_error = None
-                
-                while attempts < max_retries and not success:
-                    attempts += 1
+                try:
+                    print(f"      Attempt {attempts}/{max_retries}...")
+                    success = deposit_xml_content(
+                        submit_username, 
+                        submit_password, 
+                        xml_content,
+                        doi,
+                        use_sandbox=use_sandbox
+                    )
                     
-                    try:
-                        print(f"      Attempt {attempts}/{max_retries}...")
-                        success = deposit_test_doi(
-                            submit_username, 
-                            submit_password, 
-                            xml_path, 
-                            use_sandbox=use_sandbox
-                        )
+                    if success:
+                        print("      ✅ Submission successful!")
+                        successful += 1
+                        break
+                    else:
+                        last_error = "Submission failed (unknown reason)"
                         
-                        if success:
-                            print("      ✅ Submission successful!")
-                            successful += 1
-                            break
-                        else:
-                            last_error = "Submission failed (unknown reason)"
-                            
-                    except Exception as e:
-                        last_error = str(e)
-                        print(f"      ❌ Attempt {attempts} failed: {e}")
-                    
-                    # Wait before retry (except on last attempt)
-                    if attempts < max_retries and not success:
-                        print(f"      ⏳ Waiting {delay_between_submissions}s before retry...")
-                        time.sleep(delay_between_submissions)
+                except Exception as e:
+                    last_error = str(e)
+                    print(f"      ❌ Attempt {attempts} failed: {e}")
                 
-                # Record result
-                result_entry = {
-                    'xml_file': str(xml_path),
-                    'doi': doi_from_filename,
-                    'success': success,
-                    'attempts': attempts,
-                    'error': None if success else last_error
-                }
-                submission_results.append(result_entry)
-                
-                if not success:
-                    failed += 1
-                    print(f"      ❌ Final result: FAILED after {attempts} attempts")
-                
-                # Rate limiting delay between submissions
-                if i < len(xml_results['xml_files']):
-                    print(f"      ⏳ Waiting {delay_between_submissions}s before next submission...")
+                # Wait before retry (except on last attempt)
+                if attempts < max_retries and not success:
+                    print(f"      ⏳ Waiting {delay_between_submissions}s before retry...")
                     time.sleep(delay_between_submissions)
             
-            # Summary
-            print(f"\n📊 Batch Processing Summary:")
-            print(f"   Total DOIs: {len(xml_results['xml_files'])}")
-            print(f"   Successful: {successful}")
-            print(f"   Failed: {failed}")
-            print(f"   Success rate: {(successful/len(xml_results['xml_files'])*100):.1f}%")
-            
-            if failed > 0:
-                print(f"\n❌ Failed submissions:")
-                for result in submission_results:
-                    if not result['success']:
-                        print(f"   - {result['doi']}: {result['error']}")
-            
-            return {
-                'success': failed == 0,
-                'total_dois': len(xml_results['xml_files']),
-                'successful_submissions': successful,
-                'failed_submissions': failed,
-                'success_rate': successful/len(xml_results['xml_files']) if xml_results['xml_files'] else 0,
-                'xml_results': xml_results,
-                'conflict_check': conflict_results,
-                'results': submission_results,
-                'environment': 'sandbox' if use_sandbox else 'production'
+            # Record result
+            result_entry = {
+                'doi': doi,
+                'title': title,
+                'success': success,
+                'attempts': attempts,
+                'error': None if success else last_error,
+                'batch_id': metadata.get('batch_id'),
+                'row_number': metadata.get('row_number')
             }
+            submission_results.append(result_entry)
+            
+            if not success:
+                failed += 1
+                print(f"      ❌ Final result: FAILED after {attempts} attempts")
+            
+            # Rate limiting delay between submissions (except for the last one)
+            print(f"      ⏳ Waiting {delay_between_submissions}s before next submission...")
+            time.sleep(delay_between_submissions)
+        
+        # Summary
+        total_processed = len(submission_results)
+        print(f"\n📊 Batch Processing Summary:")
+        print(f"   Total DOIs processed: {total_processed}")
+        print(f"   Successful: {successful}")
+        print(f"   Failed: {failed}")
+        if total_processed > 0:
+            print(f"   Success rate: {(successful/total_processed*100):.1f}%")
+        
+        if failed > 0:
+            print(f"\n❌ Failed submissions:")
+            for result in submission_results:
+                if not result['success']:
+                    print(f"   - {result['doi']}: {result['error']}")
+        
+        return {
+            'success': failed == 0,
+            'total_dois': total_processed,
+            'successful_submissions': successful,
+            'failed_submissions': failed,
+            'success_rate': successful/total_processed if total_processed else 0,
+            'conflict_check': conflict_results,
+            'results': submission_results,
+            'environment': 'sandbox' if use_sandbox else 'production'
+        }
     
     def verify_submissions(self, batch_results: Dict[str, Any], 
                           member_id: str) -> Dict[str, Any]:

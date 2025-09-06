@@ -40,7 +40,7 @@ from pathlib import Path
 import csv
 import json
 import tempfile
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, Generator, Tuple
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -311,6 +311,57 @@ class CSVToXMLConverter:
         ])
         
         return '\n'.join(xml_lines)
+    
+    def generate_xml_from_csv(self, csv_file: Union[str, Path]) -> Generator[Tuple[str, Dict[str, str]], None, None]:
+        """
+        Generate XML strings from CSV file without creating physical files.
+        
+        Parameters
+        ----------
+        csv_file : str or Path
+            Input CSV file path
+            
+        Yields
+        ------
+        Tuple[str, Dict[str, str]]
+            Tuple of (xml_content, row_metadata) where:
+            - xml_content: Generated XML string ready for submission
+            - row_metadata: Dictionary with 'doi', 'title', 'row_number' for tracking
+        """
+        csv_path = Path(csv_file)
+        if not csv_path.exists():
+            raise FileNotFoundError(f"CSV file not found: {csv_file}")
+        
+        # Generate batch ID once for all DOIs
+        batch_id = f"philosophie-batch-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            
+            # Validate headers
+            missing_headers = self.required_fields - set(reader.fieldnames or [])
+            if missing_headers:
+                raise ValueError(f"Missing required CSV headers: {', '.join(missing_headers)}")
+            
+            # Process each row
+            for row_num, row in enumerate(reader, start=2):  # Start at 2 (header is row 1)
+                # Validate row
+                row_errors = self.validate_csv_row(row, row_num)
+                if row_errors:
+                    raise ValueError(f"Row {row_num} validation failed: {'; '.join(row_errors)}")
+                
+                # Generate XML content
+                xml_content = self.generate_xml(row, batch_id)
+                
+                # Create metadata for tracking
+                metadata = {
+                    'doi': row['doi'].strip(),
+                    'title': row.get('title', '').strip(),
+                    'row_number': row_num,
+                    'batch_id': batch_id
+                }
+                
+                yield xml_content, metadata
     
     def _escape_xml(self, text: str) -> str:
         """Escape XML special characters."""
