@@ -280,7 +280,12 @@ def generate_test_report(xml_file: Union[str, Path],
 if __name__ == "__main__":
     load_dotenv()
     
-    xml_file = Path("test_doi.xml")
+    import sys
+    
+    if len(sys.argv) > 1:
+        xml_file = Path(sys.argv[1])
+    else:
+        xml_file = Path("test_doi.xml")
     
     print("🔍 Starting XML validation tests...")
     print(f"   Target file: {xml_file}")
