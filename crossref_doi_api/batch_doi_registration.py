@@ -221,7 +221,8 @@ class BatchDOIRegistration:
                       use_sandbox: bool = True,
                       check_conflicts: bool = True,
                       delay_between_submissions: float = 2.0,
-                      max_retries: int = 3) -> Dict[str, Any]:
+                      max_retries: int = 3,
+                      dry_run: bool = False) -> Dict[str, Any]:
         """
         Register DOIs from CSV file in batch.
         
@@ -237,6 +238,8 @@ class BatchDOIRegistration:
             Seconds to wait between submissions (rate limiting)
         max_retries : int
             Maximum retry attempts per DOI
+        dry_run : bool
+            If True, generate XML files instead of submitting to Crossref
             
         Returns
         -------
@@ -251,10 +254,15 @@ class BatchDOIRegistration:
                 'results': []
             }
         
-        print("🚀 Starting batch DOI registration...")
-        print(f"   CSV file: {csv_path}")
-        print(f"   Environment: {'SANDBOX' if use_sandbox else 'PRODUCTION'}")
-        print(f"   Delay between submissions: {delay_between_submissions}s")
+        if dry_run:
+            print("🔍 Starting DRY RUN - XML generation only...")
+            print(f"   CSV file: {csv_path}")
+            print(f"   Mode: XML files will be saved to current directory")
+        else:
+            print("🚀 Starting batch DOI registration...")
+            print(f"   CSV file: {csv_path}")
+            print(f"   Environment: {'SANDBOX' if use_sandbox else 'PRODUCTION'}")
+            print(f"   Delay between submissions: {delay_between_submissions}s")
         
         # Use appropriate credentials
         submit_username = self.sandbox_username if use_sandbox else self.username
@@ -276,90 +284,155 @@ class BatchDOIRegistration:
                             'results': []
                         }
         
-        # Process CSV with in-memory XML generation (using generator - no file creation!)
-        print("\n📡 Processing CSV and submitting DOIs to Crossref...")
-        
-        try:
-            # Use generator to process XML in memory - no temporary files!
-            xml_generator = self.csv_converter.generate_xml_from_csv(csv_file)
+        if dry_run:
+            # DRY RUN: Generate XML files in current directory
+            print("\n📄 Processing CSV and generating XML files...")
             
-        except Exception as e:
-            return {
-                'success': False,
-                'error': f"CSV processing failed: {e}",
-                'conflict_check': conflict_results,
-                'results': []
-            }
-        
-        # Submit each XML directly from memory using the generator
-        submission_results = []
-        successful = 0
-        failed = 0
-        
-        for i, (xml_content, metadata) in enumerate(xml_generator, 1):
-            doi = metadata['doi']
-            title = metadata.get('title', '(no title)')
+            try:
+                xml_generator = self.csv_converter.generate_xml_from_csv(csv_file)
+            except Exception as e:
+                return {
+                    'success': False,
+                    'error': f"CSV processing failed: {e}",
+                    'conflict_check': conflict_results,
+                    'results': []
+                }
             
-            # Progress reporting every 100 entries
-            if i % 100 == 0:
-                print(f"\n📈 {i} entries processed so far...")
+            # Save XML files for dry run
+            submission_results = []
+            successful = 0
+            failed = 0
             
-            print(f"\n   [{i}] Processing: {doi}")
-            print(f"      Title: {title}")
-            
-            # Attempt submission with retries
-            success = False
-            attempts = 0
-            last_error = None
-            
-            while attempts < max_retries and not success:
-                attempts += 1
+            for i, (xml_content, metadata) in enumerate(xml_generator, 1):
+                doi = metadata['doi']
+                title = metadata.get('title', '(no title)')
+                
+                # Progress reporting every 100 entries
+                if i % 100 == 0:
+                    print(f"\n📈 {i} entries processed so far...")
+                
+                print(f"\n   [{i}] Generating XML for: {doi}")
+                print(f"      Title: {title}")
+                
+                # Create safe filename from DOI
+                safe_doi = doi.replace('/', '_').replace('.', '_')
+                xml_filename = f"{safe_doi}.xml"
                 
                 try:
-                    print(f"      Attempt {attempts}/{max_retries}...")
-                    success = deposit_xml_content(
-                        submit_username, 
-                        submit_password, 
-                        xml_content,
-                        doi,
-                        use_sandbox=use_sandbox
-                    )
+                    # Save XML to current directory
+                    with open(xml_filename, 'w', encoding='utf-8') as f:
+                        f.write(xml_content)
                     
-                    if success:
-                        print("      ✅ Submission successful!")
-                        successful += 1
-                        break
-                    else:
-                        last_error = "Submission failed (unknown reason)"
-                        
+                    print(f"      ✅ XML saved: {xml_filename}")
+                    successful += 1
+                    
+                    # Record result
+                    submission_results.append({
+                        'doi': doi,
+                        'title': title,
+                        'success': True,
+                        'xml_file': xml_filename,
+                        'batch_id': metadata.get('batch_id'),
+                        'row_number': metadata.get('row_number')
+                    })
+                    
                 except Exception as e:
-                    last_error = str(e)
-                    print(f"      ❌ Attempt {attempts} failed: {e}")
+                    print(f"      ❌ Failed to save XML: {e}")
+                    failed += 1
+                    
+                    submission_results.append({
+                        'doi': doi,
+                        'title': title,
+                        'success': False,
+                        'error': str(e),
+                        'batch_id': metadata.get('batch_id'),
+                        'row_number': metadata.get('row_number')
+                    })
+        else:
+            # NORMAL MODE: Process CSV with in-memory XML generation
+            print("\n📡 Processing CSV and submitting DOIs to Crossref...")
+            
+            try:
+                # Use generator to process XML in memory - no temporary files!
+                xml_generator = self.csv_converter.generate_xml_from_csv(csv_file)
                 
-                # Wait before retry (except on last attempt)
-                if attempts < max_retries and not success:
-                    print(f"      ⏳ Waiting {delay_between_submissions}s before retry...")
-                    time.sleep(delay_between_submissions)
+            except Exception as e:
+                return {
+                    'success': False,
+                    'error': f"CSV processing failed: {e}",
+                    'conflict_check': conflict_results,
+                    'results': []
+                }
             
-            # Record result
-            result_entry = {
-                'doi': doi,
-                'title': title,
-                'success': success,
-                'attempts': attempts,
-                'error': None if success else last_error,
-                'batch_id': metadata.get('batch_id'),
-                'row_number': metadata.get('row_number')
-            }
-            submission_results.append(result_entry)
+            # Submit each XML directly from memory using the generator
+            submission_results = []
+            successful = 0
+            failed = 0
             
-            if not success:
-                failed += 1
-                print(f"      ❌ Final result: FAILED after {attempts} attempts")
-            
-            # Rate limiting delay between submissions (except for the last one)
-            print(f"      ⏳ Waiting {delay_between_submissions}s before next submission...")
-            time.sleep(delay_between_submissions)
+            for i, (xml_content, metadata) in enumerate(xml_generator, 1):
+                doi = metadata['doi']
+                title = metadata.get('title', '(no title)')
+                
+                # Progress reporting every 100 entries
+                if i % 100 == 0:
+                    print(f"\n📈 {i} entries processed so far...")
+                
+                print(f"\n   [{i}] Processing: {doi}")
+                print(f"      Title: {title}")
+                
+                # Attempt submission with retries
+                success = False
+                attempts = 0
+                last_error = None
+                
+                while attempts < max_retries and not success:
+                    attempts += 1
+                    
+                    try:
+                        print(f"      Attempt {attempts}/{max_retries}...")
+                        success = deposit_xml_content(
+                            submit_username, 
+                            submit_password, 
+                            xml_content,
+                            doi,
+                            use_sandbox=use_sandbox
+                        )
+                        
+                        if success:
+                            print("      ✅ Submission successful!")
+                            successful += 1
+                            break
+                        else:
+                            last_error = "Submission failed (unknown reason)"
+                            
+                    except Exception as e:
+                        last_error = str(e)
+                        print(f"      ❌ Attempt {attempts} failed: {e}")
+                    
+                    # Wait before retry (except on last attempt)
+                    if attempts < max_retries and not success:
+                        print(f"      ⏳ Waiting {delay_between_submissions}s before retry...")
+                        time.sleep(delay_between_submissions)
+                
+                # Record result
+                result_entry = {
+                    'doi': doi,
+                    'title': title,
+                    'success': success,
+                    'attempts': attempts,
+                    'error': None if success else last_error,
+                    'batch_id': metadata.get('batch_id'),
+                    'row_number': metadata.get('row_number')
+                }
+                submission_results.append(result_entry)
+                
+                if not success:
+                    failed += 1
+                    print(f"      ❌ Final result: FAILED after {attempts} attempts")
+                
+                # Rate limiting delay between submissions (except for the last one)
+                print(f"      ⏳ Waiting {delay_between_submissions}s before next submission...")
+                time.sleep(delay_between_submissions)
         
         # Summary
         total_processed = len(submission_results)
@@ -469,6 +542,8 @@ def main():
                        help='Use sandbox environment (default: True for safety)')
     parser.add_argument('--production', action='store_true',
                        help='Use PRODUCTION environment (CAUTION: registers real DOIs!)')
+    parser.add_argument('--dry-run', action='store_true',
+                       help='Generate XML files without submitting to Crossref')
     parser.add_argument('--no-conflict-check', action='store_true',
                        help='Skip checking for existing DOI conflicts')
     parser.add_argument('--delay', type=float, default=3.0,
@@ -527,7 +602,8 @@ def main():
         use_sandbox=use_sandbox,
         check_conflicts=not args.no_conflict_check,
         delay_between_submissions=args.delay,
-        max_retries=args.retries
+        max_retries=args.retries,
+        dry_run=args.dry_run
     )
     
     # Verify submissions if requested

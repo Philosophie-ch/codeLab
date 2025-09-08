@@ -191,10 +191,10 @@ class CSVToXMLConverter:
         # Build XML
         xml_lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
-            '<doi_batch version="4.4.2" xmlns="http://www.crossref.org/schema/4.4.2"',
+            '<doi_batch version="5.4.0" xmlns="http://www.crossref.org/schema/5.4.0"',
             '           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
-            '           xsi:schemaLocation="http://www.crossref.org/schema/4.4.2',
-            '           http://www.crossref.org/schema/deposit/crossref4.4.2.xsd">',
+            '           xsi:schemaLocation="http://www.crossref.org/schema/5.4.0',
+            '           http://www.crossref.org/schema/deposit/crossref5.4.0.xsd">',
             '',
             '  <head>',
             f'    <doi_batch_id>{batch_id}</doi_batch_id>',
