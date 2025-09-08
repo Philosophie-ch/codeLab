@@ -13,13 +13,19 @@ Key Features:
 
 Usage:
     python update_dois.py updates.csv [options]
+    
+    # For domain migration using your clean CSV metadata:
+    python update_dois.py updates.csv --use-csv-metadata
+    
+    # To preserve existing Crossref metadata (original behavior):
+    python update_dois.py updates.csv
 
 CSV Format for Updates:
 ======================
 
 Required Headers:
 - doi: The existing DOI to update (e.g., "10.48106/example.2025.001")
-- new_resource_url: New primary URL (requires full update)
+- link: New primary URL (requires full update)
 
 Optional Headers:
 - update_type: "resource-only" or "full" (auto-detected if not specified)
@@ -30,7 +36,7 @@ Examples:
 =========
 
 # Update primary URL (requires full metadata update)
-doi,new_resource_url,update_reason
+doi,link,update_reason
 10.48106/example.2025.001,https://newdomain.com/article1,Domain migration
 
 # Add secondary URLs (resource-only deposit)
@@ -302,6 +308,158 @@ class DOIUpdater:
         
         return '\n'.join(xml_lines)
     
+    def generate_csv_metadata_update_xml(self, row_data: Dict[str, str], batch_id: str) -> str:
+        """
+        Generate full metadata update XML using CSV data as source.
+        
+        This method is designed for domain migration and metadata correction
+        where you want to use your clean CSV data rather than fetching
+        potentially low-quality existing metadata from Crossref API.
+        
+        Parameters
+        ----------
+        row_data : Dict[str, str]
+            CSV row data with clean metadata
+        batch_id : str
+            Unique batch identifier
+            
+        Returns
+        -------
+        str
+            Generated full update XML using CSV metadata
+        """
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        doi = row_data.get('doi', '').strip()
+        
+        # Extract metadata from CSV - using clean data as source of truth
+        title = row_data.get('title', '').strip()
+        new_url = row_data.get('link', '').strip()
+        external_link = row_data.get('external_link', '').strip()  # For secondary URLs
+        year = row_data.get('_year', '').strip()
+        
+        # Author information
+        author_given = row_data.get('author_given_name', '').strip()
+        author_surname = row_data.get('author_surname', '').strip()
+        
+        # Journal information
+        journal_title = row_data.get('journal_title', 'Philosophie.ch Publications').strip()
+        journal_issn = row_data.get('journal_issn', '').strip()
+        volume = row_data.get('volume', '').strip()
+        issue = row_data.get('issue', '').strip()
+        first_page = row_data.get('first_page', '').strip()
+        last_page = row_data.get('last_page', '').strip()
+        language = row_data.get('language', 'en').strip()
+        
+        # Build XML structure
+        xml_lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<doi_batch version="5.4.0" xmlns="http://www.crossref.org/schema/5.4.0"',
+            '           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+            '           xsi:schemaLocation="http://www.crossref.org/schema/5.4.0',
+            '           http://www.crossref.org/schema/deposit/crossref5.4.0.xsd">',
+            '',
+            '  <head>',
+            f'    <doi_batch_id>{batch_id}</doi_batch_id>',
+            f'    <timestamp>{timestamp}</timestamp>',
+            '    <depositor>',
+            f'      <depositor_name>{self.depositor_name}</depositor_name>',
+            f'      <email_address>{self.depositor_email}</email_address>',
+            '    </depositor>',
+            f'    <registrant>{self.depositor_name}</registrant>',
+            '  </head>',
+            '',
+            '  <body>',
+            '    <journal>',
+            f'      <journal_metadata language="{language}">',
+            f'        <full_title>{self._escape_xml(journal_title)}</full_title>',
+        ]
+        
+        # Add ISSN if available
+        if journal_issn:
+            xml_lines.append(f'        <issn media_type="electronic">{journal_issn}</issn>')
+        
+        xml_lines.extend([
+            '      </journal_metadata>',
+            '',
+            '      <journal_issue>',
+            '        <publication_date media_type="online">',
+            f'          <year>{year}</year>' if year else '          <year></year>',
+            '        </publication_date>',
+        ])
+        
+        # Add volume and issue if available
+        if volume:
+            xml_lines.extend([
+                '        <journal_volume>',
+                f'          <volume>{volume}</volume>',
+                '        </journal_volume>',
+            ])
+        
+        if issue:
+            xml_lines.append(f'        <issue>{issue}</issue>')
+            
+        xml_lines.extend([
+            '      </journal_issue>',
+            '',
+            '      <journal_article publication_type="full_text">',
+            '        <titles>',
+            f'          <title>{self._escape_xml(title)}</title>',
+            '        </titles>',
+            '        <contributors>',
+        ])
+        
+        # Add authors if available
+        if author_given or author_surname:
+            xml_lines.extend([
+                '          <person_name sequence="first" contributor_role="author">',
+                f'            <given_name>{self._escape_xml(author_given)}</given_name>',
+                f'            <surname>{self._escape_xml(author_surname)}</surname>',
+                '          </person_name>',
+            ])
+            
+        xml_lines.extend([
+            '        </contributors>',
+            '        <publication_date media_type="online">',
+            f'          <year>{year}</year>' if year else '          <year></year>',
+            '        </publication_date>',
+        ])
+        
+        # Add pages if available
+        if first_page or last_page:
+            xml_lines.append('        <pages>')
+            if first_page:
+                xml_lines.append(f'          <first_page>{first_page}</first_page>')
+            if last_page:
+                xml_lines.append(f'          <last_page>{last_page}</last_page>')
+            xml_lines.append('        </pages>')
+        
+        # DOI data with primary URL
+        xml_lines.extend([
+            '        <doi_data>',
+            f'          <doi>{doi}</doi>',
+            f'          <resource>{self._escape_xml(new_url)}</resource>',
+        ])
+        
+        # Add secondary URL (e.g., original JSTOR link) if provided
+        if external_link:
+            xml_lines.extend([
+                '          <collection property="crawler-based">',
+                '            <item crawler="iParadigms">',
+                f'              <resource>{self._escape_xml(external_link)}</resource>',
+                '            </item>',
+                '          </collection>',
+            ])
+            
+        xml_lines.extend([
+            '        </doi_data>',
+            '      </journal_article>',
+            '    </journal>',
+            '  </body>',
+            '</doi_batch>'
+        ])
+        
+        return '\n'.join(xml_lines)
+    
     def _escape_xml(self, text: str) -> str:
         """Escape XML special characters."""
         return (str(text).replace('&', '&amp;')
@@ -379,20 +537,25 @@ class DOIUpdater:
     def process_updates(self, csv_file: Union[str, Path], 
                        use_sandbox: bool = True,
                        dry_run: bool = False,
-                       delay_between_updates: float = 2.0) -> Dict[str, Any]:
+                       delay_between_updates: float = 2.0,
+                       use_csv_metadata: bool = False) -> Dict[str, Any]:
         """
         Process DOI updates from CSV file.
         
         Parameters
         ----------
-        csv_file : str or Path
-            CSV file with update instructions
-        use_sandbox : bool
-            Use sandbox environment
-        dry_run : bool
-            Generate XML without submitting
-        delay_between_updates : float
-            Delay between submissions
+        csv_file : Union[str, Path]
+            Path to CSV file with update instructions
+        use_sandbox : bool, default True
+            Whether to use sandbox environment
+        dry_run : bool, default False
+            Generate XML files without submitting to Crossref
+        delay_between_updates : float, default 2.0
+            Delay between updates in seconds
+        use_csv_metadata : bool, default False
+            Use CSV data as metadata source instead of fetching from Crossref API.
+            Useful for domain migration and metadata correction.
+        
             
         Returns
         -------
@@ -437,7 +600,7 @@ class DOIUpdater:
                 
                 for i, row in enumerate(reader, 1):
                     doi = row.get('doi', '').strip()
-                    new_url = row.get('new_resource_url', '').strip()
+                    new_url = row.get('link', '').strip()
                     secondary_urls_str = row.get('secondary_urls', '').strip()
                     update_type = row.get('update_type', '').strip()
                     update_reason = row.get('update_reason', 'URL update').strip()
@@ -488,29 +651,34 @@ class DOIUpdater:
                             
                         elif update_type == "full":
                             if not new_url:
-                                print(f"      ❌ Full update requires new_resource_url")
+                                print(f"      ❌ Full update requires 'link' column")
                                 failed += 1
                                 results.append({
                                     'doi': doi,
                                     'success': False,
-                                    'error': 'Full update requires new_resource_url'
+                                    'error': 'Full update requires link column'
                                 })
                                 continue
                             
-                            # Fetch existing metadata
-                            print(f"      📥 Fetching existing metadata...")
-                            existing_metadata = self.get_existing_doi_metadata(doi)
-                            if not existing_metadata:
-                                print(f"      ❌ Could not fetch existing metadata")
-                                failed += 1
-                                results.append({
-                                    'doi': doi,
-                                    'success': False,
-                                    'error': 'Could not fetch existing metadata'
-                                })
-                                continue
-                            
-                            xml_content = self.generate_full_update_xml(doi, new_url, existing_metadata, batch_id)
+                            if use_csv_metadata:
+                                # Use CSV data as metadata source (for domain migration)
+                                print(f"      📝 Using CSV metadata for domain migration...")
+                                xml_content = self.generate_csv_metadata_update_xml(row, batch_id)
+                            else:
+                                # Fetch existing metadata from Crossref API (preserve existing metadata)
+                                print(f"      📥 Fetching existing metadata...")
+                                existing_metadata = self.get_existing_doi_metadata(doi)
+                                if not existing_metadata:
+                                    print(f"      ❌ Could not fetch existing metadata")
+                                    failed += 1
+                                    results.append({
+                                        'doi': doi,
+                                        'success': False,
+                                        'error': 'Could not fetch existing metadata'
+                                    })
+                                    continue
+                                
+                                xml_content = self.generate_full_update_xml(doi, new_url, existing_metadata, batch_id)
                         
                         else:
                             print(f"      ❌ Unknown update type: {update_type}")
@@ -620,6 +788,8 @@ def main():
                        help='Organization name for XML metadata')
     parser.add_argument('--depositor-email', default='philipp.blum@philosophie.ch',
                        help='Contact email for XML metadata')
+    parser.add_argument('--use-csv-metadata', action='store_true',
+                       help='Use CSV data as metadata source instead of fetching from Crossref API (useful for domain migration and metadata correction)')
     
     args = parser.parse_args()
     
@@ -660,7 +830,8 @@ def main():
         csv_file=args.csv_file,
         use_sandbox=use_sandbox,
         dry_run=args.dry_run,
-        delay_between_updates=args.delay
+        delay_between_updates=args.delay,
+        use_csv_metadata=args.use_csv_metadata
     )
     
     # Final summary

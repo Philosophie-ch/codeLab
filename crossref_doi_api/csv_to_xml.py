@@ -10,8 +10,8 @@ CSV Format Requirements:
 Required Headers:
 - doi: The DOI to register (e.g., "10.48106/test.2025.001")
 - title: Article/publication title
-- resource_url: URL where the publication can be accessed
-- publication_year: Year of publication (YYYY format)
+- link: URL where the publication can be accessed
+- _year: Year of publication (YYYY format)
 - author_given_name: First name of primary author
 - author_surname: Last name of primary author
 
@@ -32,7 +32,7 @@ Optional Headers:
 
 Example CSV:
 ===========
-doi,title,resource_url,publication_year,author_given_name,author_surname,journal_title,volume,issue,first_page,last_page
+doi,title,link,_year,author_given_name,author_surname,journal_title,volume,issue,first_page,last_page
 10.48106/test.2025.001,Example Article,https://philosophie.ch/articles/001,2025,John,Doe,Philosophy Review,1,1,1,10
 """
 
@@ -66,7 +66,7 @@ class CSVToXMLConverter:
         self.depositor_name = depositor_name
         self.depositor_email = depositor_email
         self.required_fields = {
-            'doi', 'title', 'resource_url', 'publication_year', 
+            'doi', 'title', 'link', '_year', 
             'author_given_name', 'author_surname'
         }
         self.optional_fields = {
@@ -99,11 +99,11 @@ class CSVToXMLConverter:
                 errors.append(f"Row {row_num}: Missing required field '{field}'")
         
         # Validate data types and formats
-        if 'publication_year' in row and row['publication_year']:
+        if '_year' in row and row['_year']:
             try:
-                year = int(row['publication_year'])
+                year = int(row['_year'])
                 if year < 1000 or year > 9999:
-                    errors.append(f"Row {row_num}: Invalid year format '{row['publication_year']}'")
+                    errors.append(f"Row {row_num}: Invalid year format '{row['_year']}'")
             except ValueError:
                 errors.append(f"Row {row_num}: Year must be a number")
         
@@ -114,8 +114,8 @@ class CSVToXMLConverter:
                 errors.append(f"Row {row_num}: DOI must start with '10.' (got: '{doi}')")
                 
         # Validate URL format
-        if 'resource_url' in row and row['resource_url']:
-            url = row['resource_url'].strip()
+        if 'link' in row and row['link']:
+            url = row['link'].strip()
             if not (url.startswith('http://') or url.startswith('https://')):
                 errors.append(f"Row {row_num}: Invalid URL format '{url}'")
         
@@ -220,7 +220,7 @@ class CSVToXMLConverter:
             xml_lines.extend([
                 '      <journal_issue>',
                 '        <publication_date media_type="online">',
-                f'          <year>{data["publication_year"]}</year>'
+                f'          <year>{data["_year"]}</year>'
             ])
             
             if 'publication_month' in data:
@@ -278,7 +278,7 @@ class CSVToXMLConverter:
         # Add publication date
         xml_lines.extend([
             '        <publication_date media_type="online">',
-            f'          <year>{data["publication_year"]}</year>'
+            f'          <year>{data["_year"]}</year>'
         ])
         
         if 'publication_month' in data:
@@ -301,7 +301,7 @@ class CSVToXMLConverter:
         xml_lines.extend([
             '        <doi_data>',
             f'          <doi>{data["doi"]}</doi>',
-            f'          <resource>{data["resource_url"]}</resource>',
+            f'          <resource>{data["link"]}</resource>',
             '        </doi_data>',
             '      </journal_article>',
             '',

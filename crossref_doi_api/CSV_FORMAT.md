@@ -10,8 +10,8 @@ These columns **must** be present in your CSV file:
 |--------|-------------|---------|
 | `doi` | The DOI to register (must start with "10.") | `10.48106/example.2025.001` |
 | `title` | Article/publication title | `The Nature of Philosophical Inquiry` |
-| `resource_url` | URL where publication can be accessed | `https://philosophie.ch/articles/001` |
-| `publication_year` | Year of publication (YYYY format) | `2025` |
+| `link` | URL where publication can be accessed | `https://philosophie.ch/articles/001` |
+| `_year` | Year of publication (YYYY format) | `2025` |
 | `author_given_name` | First name of primary author | `Johann` |
 | `author_surname` | Last name of primary author | `Mueller` |
 

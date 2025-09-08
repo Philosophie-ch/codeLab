@@ -7,7 +7,7 @@ This document describes the CSV format for updating existing DOIs using `update_
 | Column | Required | Description |
 |--------|----------|-------------|
 | `doi` | Yes | The existing DOI to update (e.g., "10.48106/dial.v8.i32.06") |
-| `resource_url` | Yes | The new URL where the DOI should point |
+| `link` | Yes | The new URL where the DOI should point |
 | `update_type` | No | Either "resource_only" or "full" (defaults to "resource_only") |
 
 ## Update Types
@@ -28,14 +28,14 @@ This document describes the CSV format for updating existing DOIs using `update_
 
 ### Resource-Only Updates (most common)
 ```csv
-doi,resource_url,update_type
+doi,link,update_type
 10.48106/dial.v8.i32.06,https://www.philosophie.ch/kroener-1954c-updated,resource_only
 10.48106/dial.v8.i32.07,https://www.philosophie.ch/another-article-updated,
 ```
 
 ### Full Updates
 ```csv
-doi,resource_url,update_type
+doi,link,update_type
 10.48106/dial.v8.i32.06,https://newdomain.com/kroener-1954c,full
 ```
 
