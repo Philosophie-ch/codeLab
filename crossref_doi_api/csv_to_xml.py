@@ -355,10 +355,10 @@ class CSVToXMLConverter:
                 
                 # Create metadata for tracking
                 metadata = {
-                    'doi': row['doi'].strip(),
-                    'title': row.get('title', '').strip(),
-                    'row_number': row_num,
-                    'batch_id': batch_id
+                    'doi': str(row['doi']).strip(),
+                    'title': str(row.get('title', '')).strip(),
+                    'row_number': str(row_num),
+                    'batch_id': str(batch_id)
                 }
                 
                 yield xml_content, metadata
