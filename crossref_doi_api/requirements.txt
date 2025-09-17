@@ -1,3 +1,0 @@
-requests
-mypy
-python-dotenv
